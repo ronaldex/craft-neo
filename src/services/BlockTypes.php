@@ -147,6 +147,7 @@ class BlockTypes extends Component
         $record->handle = $blockType->handle;
         $record->sortOrder = $blockType->sortOrder;
         $record->maxBlocks = $blockType->maxBlocks;
+        $record->maxSiblingBlocks = $blockType->maxSiblingBlocks;
         $record->maxChildBlocks = $blockType->maxChildBlocks;
         $record->childBlocks = $blockType->childBlocks;
         $record->topLevel = $blockType->topLevel;
@@ -197,6 +198,7 @@ class BlockTypes extends Component
             'handle' => $blockType->handle,
             'sortOrder' => (int)$blockType->sortOrder,
             'maxBlocks' => (int)$blockType->maxBlocks,
+            'maxSiblingBlocks' => (int)$blockType->maxSiblingBlocks,
             'maxChildBlocks' => (int)$blockType->maxChildBlocks,
             'childBlocks' => $blockType->childBlocks,
             'topLevel' => (bool)$blockType->topLevel,
@@ -344,50 +346,12 @@ class BlockTypes extends Component
                 $isNew = true;
             }
             
-            if ($fieldLayoutConfig === null || !isset($fieldLayoutConfig['id'])) {
-                if ($record->id !== null) {
-                    if ($blockType->fieldLayoutId) {
-                        $fieldsService->deleteLayoutById($blockType->fieldLayoutId);
-                    }
-                }
+            if ($fieldLayoutConfig === null && $record->id !== null && $blockType->fieldLayoutId !== null) {
+                $fieldsService->deleteLayoutById($blockType->fieldLayoutId);
             }
             
             if ($fieldLayoutConfig !== null) {
                 $fieldLayout = FieldLayout::createFromConfig($fieldLayoutConfig);
-                
-                // Ensure that blank tabs are retained, since createFromConfig() strips them out
-                $oldTabs = $fieldLayout->getTabs();
-                $configTabs = $fieldLayoutConfig['tabs'];
-                
-                if (count($configTabs) > count($oldTabs)) {
-                    $newTabs = [];
-                    $tabCount = 0;
-                    
-                    foreach ($oldTabs as $oldTab) {
-                        // Was a blank tab supposed to be here?
-                        while ($oldTab->sortOrder != $tabCount + 1) {
-                            $newTabData = $configTabs[$tabCount++];
-                            $newTabs[] = new FieldLayoutTab($newTabData);
-                        }
-                        
-                        $newTabs[] = $oldTab;
-                        $tabCount++;
-                    }
-                    
-                    // Check for any blank tab(s) at the end of the layout
-                    $endBlankTabData = array_slice($configTabs, count($newTabs));
-                    
-                    foreach ($endBlankTabData as $tabData) {
-                        $newTabs[] = new FieldLayoutTab($tabData);
-                    }
-                    
-                    // Re-set the field layout tabs if any blank tabs were added
-                    if (count($oldTabs) !== count($newTabs)) {
-                        $fieldLayout->setTabs($newTabs);
-                    }
-                }
-                
-                // Now we can save the field layout
                 $fieldLayout->id = $record->fieldLayoutId;
                 $fieldLayout->type = Block::class;
                 $fieldLayout->uid = key($data['fieldLayouts']);
@@ -400,6 +364,7 @@ class BlockTypes extends Component
             $record->handle = $data['handle'];
             $record->sortOrder = $data['sortOrder'];
             $record->maxBlocks = $data['maxBlocks'];
+            $record->maxSiblingBlocks = $data['maxSiblingBlocks'] ?? 0;
             $record->maxChildBlocks = $data['maxChildBlocks'];
             $record->childBlocks = $data['childBlocks'];
             $record->topLevel = $data['topLevel'];
@@ -413,6 +378,7 @@ class BlockTypes extends Component
             $blockType->handle = $data['handle'];
             $blockType->sortOrder = $data['sortOrder'];
             $blockType->maxBlocks = $data['maxBlocks'];
+            $blockType->maxSiblingBlocks = $data['maxSiblingBlocks'] ?? 0;
             $blockType->maxChildBlocks = $data['maxChildBlocks'];
             $blockType->childBlocks = $data['childBlocks'];
             $blockType->topLevel = $data['topLevel'];
@@ -617,20 +583,35 @@ class BlockTypes extends Component
      */
     private function _createQuery(): Query
     {
+        // `maxSiblingBlocks` was added for Neo 2.8, which was also the Craft 3.5 compatibility update.  However, Craft
+        // migrations run before plugin migrations, and Craft's `m200620_230205_field_layout_changes` migration will
+        // eventually cause this method to be called if an affected entry has a Neo field.  To work around this, we need
+        // to check whether the `maxSiblingBlocks` column exists, and only add it to `$selectColumns` if it does exist.
+        $maxSiblingBlocks = Craft::$app->getDb()
+            ->getSchema()
+            ->getTableSchema('{{%neoblocktypes}}')
+            ->getColumn('maxSiblingBlocks');
+
+        $selectColumns = [
+            'id',
+            'fieldId',
+            'fieldLayoutId',
+            'name',
+            'handle',
+            'maxBlocks',
+            'maxChildBlocks',
+            'childBlocks',
+            'topLevel',
+            'sortOrder',
+            'uid',
+        ];
+
+        if ($maxSiblingBlocks !== null) {
+            $selectColumns[] = 'maxSiblingBlocks';
+        }
+
         return (new Query())
-            ->select([
-                'id',
-                'fieldId',
-                'fieldLayoutId',
-                'name',
-                'handle',
-                'maxBlocks',
-                'maxChildBlocks',
-                'childBlocks',
-                'topLevel',
-                'sortOrder',
-                'uid',
-            ])
+            ->select($selectColumns)
             ->from(['{{%neoblocktypes}}'])
             ->orderBy(['sortOrder' => SORT_ASC]);
     }

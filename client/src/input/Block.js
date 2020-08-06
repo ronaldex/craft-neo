@@ -6,17 +6,10 @@ import Craft from 'craft'
 
 import NS from '../namespace'
 
-import ReasonsRenderer from '../plugins/reasons/Renderer'
 import { addFieldLinks } from '../plugins/cpfieldinspect/main'
 
 import renderTemplate from './templates/block.twig'
 import '../twig-extensions'
-
-const MutationObserver = (
-	window.MutationObserver ||
-	window.WebKitMutationObserver ||
-	window.MozMutationObserver
-)
 
 const _defaults = {
 	namespace: [],
@@ -187,9 +180,6 @@ export default Garnish.Base.extend({
 
 			Garnish.requestAnimationFrame(() => this.updateResponsiveness())
 
-			this._initReasonsPlugin()
-			this._initFieldLabelsPlugin()
-
 			// For Matrix blocks inside a Neo block, this listener adds a class name to the block for Neo to style.
 			// Neo applies it's own styles to Matrix blocks in an effort to improve the visibility of them, however
 			// when dragging a Matrix block these styles get lost (since a dragged Matrix block loses it's context of
@@ -209,27 +199,20 @@ export default Garnish.Base.extend({
 					content: Garnish.getPostData(this.$contentContainer)
 				}
 
-				if(MutationObserver)
-				{
-					const detectChange = () => this._detectChange()
-					const observer = new MutationObserver(() => setTimeout(detectChange, 200))
+				const detectChange = () => this._detectChange()
+				const observer = new window.MutationObserver(() => setTimeout(detectChange, 200))
 
-					observer.observe(this.$container[0], {
-						attributes: true,
-						childList: true,
-						characterData: true,
-						subtree: true,
-					})
+				observer.observe(this.$container[0], {
+					attributes: true,
+					childList: true,
+					characterData: true,
+					subtree: true,
+				})
 
-					this.$contentContainer.on('propertychange change click', 'input, textarea, select, div.redactor-in', detectChange)
-					this.$contentContainer.on('paste input keyup', 'input:not([type="hidden"]), textarea, div.redactor-in', detectChange)
+				this.$contentContainer.on('propertychange change click', 'input, textarea, select, div.redactor-in', detectChange)
+				this.$contentContainer.on('paste input keyup', 'input:not([type="hidden"]), textarea, div.redactor-in', detectChange)
 
-					this._detectChangeObserver = observer
-				}
-				else
-				{
-					this._detectChangeInterval = setInterval(() => this._detectChange(), 300)
-				}
+				this._detectChangeObserver = observer
 			}
 
 			addFieldLinks(this.$contentContainer)
@@ -252,8 +235,6 @@ export default Garnish.Base.extend({
 				this._detectChangeObserver.disconnect()
 			}
 
-			this._destroyReasonsPlugin()
-
 			this.trigger('destroy')
 		}
 	},
@@ -275,14 +256,14 @@ export default Garnish.Base.extend({
 
 	setSortOrderAttr()
 	{
-		this.$sortOrder.attr('name', this._templateNs[0] + `[${this._templateNs[1]}][sortOrder][]`)
+		this.$sortOrder.attr('name', `${this._templateNs[0]}[${this._templateNs.slice(1, -2).join('][')}][sortOrder][]`)
 	},
 
 	setLevel(level)
 	{
 		this._level = level|0
 
-		this.$levelInput.val(this._level)
+		this.$levelInput.val(`0${this._level}`)
 		this.$container.toggleClass('is-level-odd', !!(this._level % 2))
 		this.$container.toggleClass('is-level-even', !(this._level % 2))
 	},
@@ -389,6 +370,15 @@ export default Garnish.Base.extend({
 		}
 
 		return childBlocks
+	},
+
+	getSiblings(blocks)
+	{
+		if (this._level === 0) {
+			return blocks.filter(b => b.getLevel() === 0)
+		}
+
+		return this.getParent(blocks).getChildren(blocks)
 	},
 
 	updatePreview(condensed=null)
@@ -547,6 +537,7 @@ export default Garnish.Base.extend({
 				}
 				break
 				case 'craft\\fields\\MultiSelect':
+				case 'ttempleton\\categorygroupsfield\\fields\\CategoryGroupsField':
 				{
 					const values = []
 					const $selected = $input.find('select').children(':selected')
@@ -626,13 +617,14 @@ export default Garnish.Base.extend({
 				}
 				break
 				case 'typedlinkfield\\fields\\LinkField':
+				case 'fruitstudios\\linkit\\fields\\LinkitField':
 				{
 					const values = []
-					const $selectedType = $input.find('select').children(':selected')
-					const $visibleOption = $input.find('.linkfield--typeOption:not(.hidden)')
+					const $selectedType = $input.find('select').children(':selected').first()
+					const $visibleOption = $input.find('.linkfield--typeOption:not(.hidden), [class^="linkit--"]:not(.hidden)')
 					const visibleInputVal = $visibleOption.find('input[type!="hidden"]').val()
 					const $visibleElement = $visibleOption.find('.element')
-					const customText = $input.find('.field[id*="customText"] input').val()
+					const customText = $input.find('.field[id*="customText"] input, .linkit--customText input').val()
 
 					values.push(_limit($selectedType.text()))
 
@@ -708,7 +700,7 @@ export default Garnish.Base.extend({
 
 			this.$container
 				.toggleClass('is-expanded', this._expanded)
-				.toggleClass('is-contracted', !this._expanded)
+				.toggleClass('is-collapsed', !this._expanded)
 
 			expandContainer.toggleClass('hidden', this._expanded)
 			collapseContainer.toggleClass('hidden', !this._expanded)
@@ -843,9 +835,12 @@ export default Garnish.Base.extend({
 
 	updateResponsiveness()
 	{
-		this._topbarLeftWidth = this._topbarLeftWidth || this.$topbarLeftContainer.width()
-		this._topbarRightWidth = this._topbarRightWidth || this.$topbarRightContainer.width()
+		if (typeof this._topbarLeftWidth === 'undefined') {
+			const previewWidth = this._expanded ? 0 : this.$previewContainer.width()
+			this._topbarLeftWidth = this.$topbarLeftContainer.width() - previewWidth
+		}
 
+		this._topbarRightWidth = this._topbarRightWidth || this.$topbarRightContainer.width()
 		const isMobile = (this.$topbarContainer.width() < this._topbarLeftWidth + this._topbarRightWidth)
 
 		this.$tabsContainer.toggleClass('invisible', isMobile)
@@ -872,8 +867,7 @@ export default Garnish.Base.extend({
 
 		const allDisabled = maxBlocksMet || maxTopBlocksMet || !additionalCheck
 		const typeDisabled = (maxBlockTypes > 0 && blocksOfType.length >= maxBlockTypes)
-
-		const disabled = allDisabled || typeDisabled
+		let cloneDisabled = allDisabled || typeDisabled
 
 		const pasteData = JSON.parse(localStorage.getItem('neo:copy') || '{}')
 		let pasteDisabled = (!pasteData.blocks || !pasteData.field || pasteData.field !== field)
@@ -889,6 +883,33 @@ export default Garnish.Base.extend({
 				const childBlockCount = parentBlock.getChildren(blocks).length
 				const pasteBlockCount = pasteData.blocks.length
 				pasteDisabled = pasteDisabled || childBlockCount + pasteBlockCount > maxChildBlocks
+			}
+		}
+
+		// Test to see if pasting would exceed this block's max sibling blocks
+		if(!(pasteDisabled && cloneDisabled))
+		{
+			const maxSiblingBlocks = this.getBlockType().getMaxSiblingBlocks()
+
+			if(maxSiblingBlocks > 0)
+			{
+				const hasSameBlockType = (block) => {
+					if(block.hasOwnProperty('type'))
+					{
+						return block.type === this.getBlockType().getId()
+					}
+					else if(typeof block['getBlockType'] === 'function')
+					{
+						return block.getBlockType().getHandle() === this.getBlockType().getHandle()
+					}
+
+					return false
+				}
+
+				const siblingBlockCount = this.getSiblings(blocks).filter(hasSameBlockType, this).length
+				const pasteSiblingBlockCount = pasteData.blocks ? pasteData.blocks.filter(hasSameBlockType, this).length : 0
+				pasteDisabled = pasteDisabled || siblingBlockCount + pasteSiblingBlockCount > maxSiblingBlocks
+				cloneDisabled = cloneDisabled || siblingBlockCount >= maxSiblingBlocks
 			}
 		}
 
@@ -932,47 +953,8 @@ export default Garnish.Base.extend({
 		}
 
 		this.$menuContainer.find('[data-action="add"]').toggleClass('disabled', allDisabled)
-		this.$menuContainer.find('[data-action="duplicate"]').toggleClass('disabled', disabled)
+		this.$menuContainer.find('[data-action="duplicate"]').toggleClass('disabled', cloneDisabled)
 		this.$menuContainer.find('[data-action="paste"]').toggleClass('disabled', pasteDisabled)
-	},
-
-	_initReasonsPlugin()
-	{
-		const Reasons = Craft.ReasonsPlugin
-
-		if(Reasons)
-		{
-			const Renderer = ReasonsRenderer(Reasons.ConditionalsRenderer)
-
-			const type = this.getBlockType()
-			const typeId = type.getId()
-			const conditionals = Reasons.Neo.conditionals[typeId] || {}
-
-			this._reasons = new Renderer(this.$contentContainer, conditionals)
-		}
-	},
-
-	_destroyReasonsPlugin()
-	{
-		if(this._reasons)
-		{
-			this._reasons.destroy()
-		}
-	},
-
-	_initFieldLabelsPlugin()
-	{
-		const FieldLabels = window.FieldLabels
-
-		if(FieldLabels)
-		{
-			NS.enter(this._templateNs)
-
-			const blockType = this.getBlockType()
-			FieldLabels.applyLabels(this.$contentContainer, blockType.getFieldLayoutId(), NS.value())
-
-			NS.leave()
-		}
 	},
 
 	_detectChange()

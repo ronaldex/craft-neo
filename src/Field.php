@@ -221,6 +221,7 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
                 $newBlockType->name = $blockType['name'];
                 $newBlockType->handle = $blockType['handle'];
                 $newBlockType->maxBlocks = (int)$blockType['maxBlocks'];
+                $newBlockType->maxSiblingBlocks = (int)$blockType['maxSiblingBlocks'];
                 $newBlockType->maxChildBlocks = (int)$blockType['maxChildBlocks'];
                 $newBlockType->topLevel = (bool)$blockType['topLevel'];
                 $newBlockType->childBlocks = $blockType['childBlocks'];
@@ -229,12 +230,6 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
                 if (!empty($blockType['fieldLayout'])) {
                     $fieldLayoutPost = $blockType['fieldLayout'];
                     $requiredFieldPost = empty($blockType['requiredFields']) ? [] : $blockType['requiredFields'];
-                    
-                    // Add support for blank tabs
-                    foreach ($fieldLayoutPost as $tabName => $fieldIds) {
-                        $fieldLayoutPost[$tabName] = is_array($fieldIds) ? $fieldIds : [];
-                    }
-                    
                     $fieldLayout = Craft::$app->getFields()->assembleLayout($fieldLayoutPost, $requiredFieldPost);
                     $fieldLayout->type = Block::class;
                     
@@ -361,35 +356,12 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
      */
     public function normalizeValue($value, ElementInterface $element = null)
     {
-        $query = null;
-        
         if ($value instanceof ElementQueryInterface) {
             return $value;
         }
-        
+
         $query = Block::find();
-        $blockStructure = null;
-        
-        // Existing element?
-        $existingElement = $element && $element->id;
-        if ($existingElement) {
-            $query->ownerId($element->id);
-        } else {
-            $query->id(false);
-        }
-        
-        $query->fieldId($this->id)->siteId($element->siteId ?? null);
-        
-        // If an owner element exists, set the appropriate owner site ID and block structure, depending on whether
-        // the field is set to manage blocks on a per-site basis
-        if ($existingElement) {
-            $blockStructure = Neo::$plugin->blocks->getStructure($this->id, $element->id, (int)$element->siteId);
-        }
-        
-        // If we found the block structure, set the query's structure ID
-        if ($blockStructure) {
-            $query->structureId($blockStructure->structureId);
-        }
+        $this->_populateQuery($query, $element);
         
         // Set the initially matched elements if $value is already set, which is the case if there was a validation
         // error or we're loading an entry revision.
@@ -515,15 +487,25 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
     public function validateBlocks(ElementInterface $element)
     {
         $value = $element->getFieldValue($this->handle);
+        $blocks = $value->all();
+        $allBlocksValidate = true;
         
-        foreach ($value->all() as $key => $block) {
+        foreach ($blocks as $key => $block) {
             if ($element->getScenario() === Element::SCENARIO_LIVE) {
                 $block->setScenario(Element::SCENARIO_LIVE);
             }
             
             if (!$block->validate()) {
                 $element->addModelErrors($block, "{$this->handle}[{$key}]");
+
+                if ($allBlocksValidate) {
+                    $allBlocksValidate = false;
+                }
             }
+        }
+
+        if (!$allBlocksValidate) {
+            $value->setCachedResult($blocks);
         }
     }
     
@@ -598,12 +580,14 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
         if (!parent::beforeSave($isNew)) {
             return false;
         }
-        
+
+        $fieldsService = Craft::$app->getFields();
+        $class = Self::class;
+
         // TODO: need to further modify so it checks if there's changes to the field. current it's just a quick fix for #310
         if ($this->uid) {
-            $fieldsService = Craft::$app->getFields();
             $projectService = Craft::$app->getProjectConfig();
-            
+
             // since new uses predefined fields then we need to make sure craft knows to update the field.
             // the new setting
             $path = $fieldsService::CONFIG_FIELDS_KEY . '.' . $this->uid;
@@ -613,19 +597,14 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
                 $this->wasModified = !$value['settings']['wasModified'];
             }
         }
-        
-        // 	// Prep the block types & fields for save
-        // 	$fieldsService = Craft::$app->getFields();
-        //
-        // 	// remember the original propagation method
-        // 	if ($this->id) {
-        // 		$oldField = $fieldsService->getFieldById($this->id);
-        //
-        // 		if ($oldField instanceof self) {
-        // 			$this->_oldPropagationMethod = $oldField->propagationMethod;
-        // 		}
-        // 	}
-        //
+
+        // Set each block type's field layout based on the data from Craft 3.5's field layout designer
+        foreach ($this->getBlockTypes() as $blockType) {
+            $fieldLayout = $fieldsService->assembleLayoutFromPost("types.{$class}.blockTypes.{$blockType->id}");
+            $fieldLayout->type = $class;
+            $blockType->setFieldLayout($fieldLayout);
+        }
+
         return true;
     }
     
@@ -664,18 +643,7 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
         
         return parent::beforeDelete();
     }
-    
-    /**
-     * @inheritdoc
-     */
-    
-    //	public function afterElementSave(ElementInterface $element, bool $isNew)
-    //	{
-    //		Neo::$plugin->fields->saveValue($this, $element);
-    //
-    //		parent::afterElementSave($element, $isNew);
-    //	}
-    
+
     /**
      * @inheritdoc
      */
@@ -685,19 +653,21 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
         if ($element->duplicateOf !== null) {
             Neo::$plugin->fields->duplicateBlocks($this, $element->duplicateOf, $element, true);
         } else {
-            if ($element->isFieldDirty($this->handle)) {
+            if ($element->isFieldDirty($this->handle) || !empty($element->newSiteIds)) {
                 Neo::$plugin->fields->saveValue($this, $element);
             }
         }
-        
-        // Reset the field value if this is a new element
+
+        // Repopulate the Neo block query if this is a new element
         if ($element->duplicateOf || $isNew) {
-            $element->setFieldValue($this->handle, null);
+            $query = $element->getFieldValue($this->handle);
+            $this->_populateQuery($query, $element);
+            $query->clearCachedResult();
         }
-        
+
         parent::afterElementPropagate($element, $isNew);
     }
-    
+
     /**
      * @inheritdoc
      */
@@ -1087,5 +1057,34 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
         }
         
         return !$isNull;
+    }
+
+    /**
+     * Sets some default properties on a Neo block query on this field, given its owner element.
+     *
+     * @param BlockQuery $query
+     * @param ElementInterface|null $element
+     */
+    private function _populateQuery(BlockQuery $query, ElementInterface $element = null)
+    {
+        // Existing element?
+        $existingElement = $element && $element->id;
+
+        if ($existingElement) {
+            $query->ownerId($element->id);
+        } else {
+            $query->id(false);
+        }
+
+        $query->fieldId($this->id)->siteId($element->siteId ?? null);
+
+        // If the owner element exists, set the appropriate block structure
+        if ($existingElement) {
+            $blockStructure = Neo::$plugin->blocks->getStructure($this->id, $element->id, (int)$element->siteId);
+
+            if ($blockStructure) {
+                $query->structureId($blockStructure->structureId);
+            }
+        }
     }
 }

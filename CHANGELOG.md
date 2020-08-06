@@ -1,5 +1,122 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- Fixed an error that occurred with Craft 3.5 / Neo 2.8 when rebuilding the project config, if any Neo block type field layout consisted only of blank tab(s)
+- Fixed a bug with previous Neo 2.8 releases where default values on dropdown fields were not being applied to new Neo blocks
+- Replaced the usage of various deprecated Twig classes
+
+## 2.8.2 - 2020-08-05
+
+### Changed
+- Neo now requires Craft 3.5.0 or later
+
+### Fixed
+- Fixed a CSS issue where unselected Neo block tab content would still be displayed along with the selected tab's content when in live preview mode
+
+## 2.8.1 - 2020-08-04
+
+### Fixed
+- Fixed a CSS issue where unselected Neo block tab content would still be displayed along with the selected tab's content
+- Fixed a bug where Neo fields created prior to the 2.8.0 upgrade, and that had not since been saved, would cause the `craft project-config/apply` command to fail, due to the lack of `maxSiblingBlocks` property
+
+## 2.8.0 - 2020-08-04
+
+> {warning} As part of the changes to Neo 2.8 to support Craft 3.5's new field layout designer, it's no longer possible to save blank tabs in Neo block types' field layouts.  Existing blank tabs should be retained when upgrading to Craft 3.5 and Neo 2.8, but they will be lost if they're still blank next time the field is saved.  It's recommended to place a UI element in any blank tabs that should be kept.
+
+### Added
+- Full support for Craft 3.5's new field layout designer
+- Added the `Max Sibling Blocks of This Type` block type setting, which sets the maximum number of blocks of that block type allowed under one parent block or at the top level
+
+### Changed
+- Neo now requires Craft 3.5.0-RC6 or later
+- Updated node-sass to ^4.14.1
+
+### Deprecated
+- Deprecated `benf\neo\integrations\fieldlabels\FieldLabels`
+- Deprecated `benf\neo\converters\Field` (Neo Field Converter for Schematic)
+- Deprecated `benf\neo\converters\models\BlockType` (Neo BlockType Converter for Schematic)
+- Deprecated `benf\neo\converters\models\BlockTypeGroup` (Neo BlockTypeGroup Converter for Schematic)
+
+### Removed
+- Removed unused JavaScript related to compatibility with Quick Field, a Craft 2 plugin which was not updated for Craft 3
+- Removed usage of babel-polyfill
+
+### Fixed
+- Fixed a bug where validation errors that occurred when attempting to publish a draft were not displaying on Neo blocks
+- Fixed the position of the new block type / block type group buttons on the Neo field configurator
+- Fixed a bug where Neo-to-Matrix conversion failures were not being logged
+
+## 2.7.25 - 2020-07-28
+### Fixed
+- Fixed propagation issues that happen when an entry is enabled for a new site (thanks @brandonkelly)
+
+## 2.7.24 - 2020-07-19
+### Fixed
+- Fixed a bug where, when saving a Neo field's configuration, block types' field layouts were being deleted and recreated
+- Updated the lodash version requirement in yarn.lock to 4.17.19
+
+## 2.7.23 - 2020-07-17
+### Fixed
+- Fixed a JavaScript error preventing Neo input blocks from appearing, if the Neo field had any block types with the handles `filter` or `push`
+- Corrected the position of a Neo input block's corner checkbox
+
+## 2.7.22 - 2020-07-12
+### Fixed
+- Fixed an issue where, when editing a Neo field and selecting to make the field a Matrix field, the Neo-to-Matrix conversion prompt was not appearing
+- Fixed an issue where a Neo field containing a Super Table field would cause Neo-to-Matrix conversion to fail, also causing attempts to uninstall Neo to fail
+
+## 2.7.21 - 2020-07-02
+### Fixed
+- Fixed an issue where a collapsed block preview could still cover the settings/drag buttons in some cases
+- Fixed the padding between parent block content and child blocks
+- Fixed an issue where Neo blocks would show the mobile tab dropdown regardless of the device's screen size
+
+## 2.7.20 - 2020-06-25
+### Changed
+- When loading an element edit page, Neo fields now display a spinner before they load
+
+### Fixed
+- Reduced the bottom padding on collapsed Neo blocks
+- Fixed the side padding on Neo blocks with no fields or child block types
+- Fixed an issue where the fade-out of collapsed block preview text was not displaying correctly in Safari
+
+## 2.7.19 - 2020-06-21
+### Added
+- Collapsed block previews can now display Linkit field content
+
+### Fixed
+- Improved Neo's performance during a project config rebuild
+- Fixed an issue with displaying a Typed Link Field's selected type in collapsed block previews
+
+## 2.7.18 - 2020-06-18
+### Fixed
+- Fixed an issue where the sort order of Neo blocks was not being set properly when editing an element using an element editor modal, causing new blocks to disappear
+
+## 2.7.17 - 2020-06-17
+### Fixed
+- Fixed an issue on entry drafts, where Neo blocks with a level that matched the entry's element ID would have their level overwritten with the entry draft element ID
+
+## 2.7.16 - 2020-06-17
+### Added
+- Collapsed block previews can now display Category Groups Field content
+
+### Changed
+- Neo now requires Craft 3.4.24 or later
+
+### Fixed
+- In combination with an update to Craft 3.4.24, fixes an Exception that could occur when saving an entry (thanks @brandonkelly)
+- Fixed issue where unmodified Neo fields on entry drafts were being incorrectly set as modified
+
+## 2.7.15 - 2020-06-05
+### Fixed
+- Removed old Reasons plugin compatibility code from the Craft 2 version; fixes JavaScript errors when the Craft 3 version of Reasons is installed
+
+## 2.7.14 - 2020-06-04
+### Fixed
+- Fixed issue where disabling a parent block, while editing an entry draft, would cause its child blocks to save at the field's top level
+
 ## 2.7.13 - 2020-06-03
 ### Fixed
 - Fixed bug where collapsed block previews could cover the options dropdown and block drag buttons

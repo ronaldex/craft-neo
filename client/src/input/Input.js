@@ -61,14 +61,18 @@ export default Garnish.Base.extend({
 			'static': this._static
 		}))
 
+		this.$container.find('#' + settings.inputId + '--spinner').remove()
+
 		NS.leave()
+
+		let tempBlockTypes = []
 
 		for(let btInfo of settings.blockTypes)
 		{
 			let blockType = new BlockType(btInfo)
 
 			this._blockTypes.push(blockType)
-			this._blockTypes[blockType.getHandle()] = blockType
+			tempBlockTypes[blockType.getHandle()] = blockType
 		}
 
 		for(let gInfo of settings.groups)
@@ -131,7 +135,7 @@ export default Garnish.Base.extend({
 
 		for(let bInfo of settings.blocks)
 		{
-			let blockType = this._blockTypes[bInfo.blockType]
+			let blockType = tempBlockTypes[bInfo.blockType]
 
 			if(isNaN(parseInt(bInfo.id)))
 			{
@@ -148,6 +152,7 @@ export default Garnish.Base.extend({
 				name: blockType.getName(),
 				handle: blockType.getHandle(),
 				maxBlocks: blockType.getMaxBlocks(),
+				maxSiblingBlocks: blockType.getMaxSiblingBlocks(),
 				maxChildBlocks: blockType.getMaxChildBlocks(),
 				childBlocks: blockType.getChildBlocks(),
 				topLevel: blockType.getTopLevel(),
@@ -422,7 +427,7 @@ export default Garnish.Base.extend({
 
 		if (tabErrors.length) {
 			tabErrors.each(function(){
-				let parents = tabErrors.parents('.ni_block.is-contracted');
+				let parents = tabErrors.parents('.ni_block.is-collapsed');
 				parents.each(function(){
 					let _this = $(this);
 					_this.find('> .ni_block_topbar .title .blocktype').addClass('has-errors');
@@ -519,7 +524,7 @@ export default Garnish.Base.extend({
 
 			if(buttons)
 			{
-				buttons.updateButtonStates(blocks, this._checkMaxChildren(block))
+				buttons.updateButtonStates(blocks, this._checkMaxChildren(block), block)
 			}
 		}
 	},
@@ -703,6 +708,7 @@ export default Garnish.Base.extend({
 						name: blockType.getName(),
 						handle: blockType.getHandle(),
 						maxBlocks: blockType.getMaxBlocks(),
+						maxSiblingBlocks: blockType.getMaxSiblingBlocks(),
 						maxChildBlocks: blockType.getMaxChildBlocks(),
 						childBlocks: blockType.getChildBlocks(),
 						topLevel: blockType.getTopLevel(),

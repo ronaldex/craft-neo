@@ -335,8 +335,12 @@ class Fields extends Component
                     'ownerId' => $target->id,
                     'owner' => $target,
                     'siteId' => $target->siteId,
+                    'structureId' => null,
                     'propagating' => false,
                 ]);
+
+                // Levels not applying properly when saving drafts, so do it manually
+                $newBlock->level = $block->level;
                 
                 $newBlock->setCollapsed($collapsed);
                 $newBlock->cacheCollapsed();
