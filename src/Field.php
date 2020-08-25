@@ -78,7 +78,7 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
     
     /**
      * @var bool Whether this field is translatable.
-     * @deprecated in 3.2. Use [[$propagationMethod]] instead
+     * @deprecated in 2.4.0. Use [[$propagationMethod]] instead
      */
     public $localizeBlocks = false;
     
@@ -235,7 +235,7 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
                     
                     // Ensure the field layout ID is set, if it exists
                     if (is_int($blockTypeId)) {
-                        $layoutIdResult = (new Query)
+                        $layoutIdResult = (new Query())
                             ->select(['fieldLayoutId'])
                             ->from('{{%neoblocktypes}}')
                             ->where(['id' => $blockTypeId])
@@ -286,11 +286,12 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
     {
         $newBlockTypeGroups = [];
         
-        foreach ($blockTypeGroups as $blockTypeGroup) {
+        foreach ($blockTypeGroups as $id => $blockTypeGroup) {
             $newBlockTypeGroup = $blockTypeGroup;
             
             if (!($blockTypeGroup instanceof BlockTypeGroup)) {
                 $newBlockTypeGroup = new BlockTypeGroup();
+                $newBlockTypeGroup->id = $id;
                 $newBlockTypeGroup->fieldId = $this->id;
                 $newBlockTypeGroup->name = $blockTypeGroup['name'];
                 $newBlockTypeGroup->sortOrder = (int)$blockTypeGroup['sortOrder'];
