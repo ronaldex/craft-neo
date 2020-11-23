@@ -292,7 +292,7 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
 
         foreach ($blockTypeGroups as $id => $blockTypeGroup) {
             $newBlockTypeGroup = $blockTypeGroup;
-            
+
             if (!($blockTypeGroup instanceof BlockTypeGroup)) {
                 $newBlockTypeGroup = new BlockTypeGroup();
                 $newBlockTypeGroup->id = $id;
@@ -964,7 +964,8 @@ class Field extends BaseField implements EagerLoadingFieldInterface, GqlInlineFr
             // Existing block?
             if (isset($oldBlocksById[$blockId])) {
                 $block = $oldBlocksById[$blockId];
-                $block->dirty = $isModified;
+                $block->dirty = isset($blockData['modified']) ? (bool)$blockData['modified'] : true;
+                // $block->dirty = $isModified;
             } else {
                 // Make sure it's a valid block type
                 if (!isset($blockData['type']) || !isset($blockTypes[$blockData['type']])) {
